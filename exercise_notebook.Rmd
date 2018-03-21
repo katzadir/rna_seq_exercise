@@ -37,4 +37,10 @@ head(sample_annotation)
 
 # seems like categorical variable
 table(sample_annotation$type)
+
+
+# look at the count data-set
+counts_df <- as.data.frame(counts)
+colnames(counts_df)[1] <- "ENSEMBL"
+head(counts_df)
 ```
