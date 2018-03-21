@@ -5,7 +5,7 @@ output: html_notebook
 
 
 
-```{r Setup phase}
+```{r Setup phase, message=TRUE}
 
 # Install Bioconductor
 source("https://bioconductor.org/biocLite.R")
@@ -19,12 +19,22 @@ biocLite("edgeR")
 ```{r Raw data import}
 
 # Import the raw dataset
-sampe_annotation <- read.delim("bioinfomratics-exercise/data/sample-annotation.txt")
-gene_annotation <- read.delim("bioinfomratics-exercise/data/gene-annotation.txt")
-counts <- read.delim("bioinfomratics-exercise/data/counts.txt")
+sample_annotation <- read.delim("data/sample-annotation.txt")
+gene_annotation <- read.delim("data/gene-annotation.txt")
+counts <- read.delim("data/counts.txt")
 ```
 
 ```{r Exploratory analysis}
 
-# 
+# explore the properties of the gene-annotation 
+dim(gene_annotation)
+summary(gene_annotation)
+head(gene_annotation)
+
+# the same for sample annotation
+dim(sample_annotation)
+head(sample_annotation)
+
+# seems like categorical variable
+table(sample_annotation$type)
 ```
