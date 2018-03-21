@@ -1,0 +1,30 @@
+---
+title: "Bioinformatics exercise"
+output: html_notebook
+---
+
+
+
+```{r Setup phase}
+
+# Install Bioconductor
+source("https://bioconductor.org/biocLite.R")
+biocLite()
+
+# Install edgeR
+biocLite("edgeR")
+
+```
+
+```{r Raw data import}
+
+# Import the raw dataset
+sampe_annotation <- read.delim("bioinfomratics-exercise/data/sample-annotation.txt")
+gene_annotation <- read.delim("bioinfomratics-exercise/data/gene-annotation.txt")
+counts <- read.delim("bioinfomratics-exercise/data/counts.txt")
+```
+
+```{r Exploratory analysis}
+
+# 
+```
