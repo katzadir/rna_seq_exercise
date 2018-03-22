@@ -85,10 +85,14 @@ normal_col_idx <- which(y$samples$group %in% "lesional")
 lesional_col_idx <- which(y$samples$group %in% "normal")
 toKeep_normal <- rowSums(valid_cpm[,normal_col_idx]) > 0.75*length(normal_col_idx)
 toKeep_lesional <- rowSums(valid_cpm[,lesional_col_idx]) > 0.75*length(lesional_col_idx)
-toKeep <- as.numeric(union(names(toKeep_normal[toKeep_normal]),names(toKeep_lesional[toKeep_lesional])))
+toKeep <- (union(names(toKeep_normal[toKeep_normal]),names(toKeep_lesional[toKeep_lesional])))
 sprintf("Remaining with %s genes out of %s",length(toKeep), length(counts$ENSEMBL))
-counts <- counts[toKeep,]
-
+y$counts <- y$counts[toKeep,]
 #count_qnt <- t(apply(counts[,-1], 1, quantile, probe = c(.25,.75), na.rm = FALSE))
+```
+
+```{r Generate an object that contains the library-size normalized log-CPM}
+aveLogCPM_normByLibSize <- aveLogCPM(y, normalized.lib.sizes = TRUE)
+save(aveLogCPM_normByLibSize, file = "aveLogCPM_normByLibSize.rda")
 ```
 
