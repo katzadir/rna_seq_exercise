@@ -13,7 +13,8 @@ biocLite()
 
 # Install edgeR
 biocLite("edgeR")
-
+library(limma)
+library(edgeR)
 ```
 
 ```{r Raw data import}
@@ -21,16 +22,16 @@ biocLite("edgeR")
 # Import the raw dataset
 sample_annotation <- read.delim("data/sample-annotation.txt")
 gene_annotation <- read.delim("data/gene-annotation.txt")
-counts <- read.delim("data/counts.txt")
+counts <- read.delim("data/counts.txt", stringsAsFactors = TRUE)
+
 ```
 
-```{r Exploratory analysis}
+```{r Initial cleaning - form DGEList}
 
 # explore the properties of the gene-annotation 
 dim(gene_annotation)
 summary(gene_annotation)
 head(gene_annotation)
-
 
 # the same for sample annotation
 dim(sample_annotation)
@@ -39,32 +40,55 @@ head(sample_annotation)
 # seems like categorical variable
 table(sample_annotation$type)
 
-
 # look at the count data-set, extract quantiles
 dim(counts)
 colnames(counts)[1] <- "ENSEMBL"
 
-
 # now sure the annotation and counts are consistent
+# it seems we have quite a lot of missing gene annotations
 length(unique(counts$ENSEMBL))
 length(unique(gene_annotation$ENSEMBL))
-# it seems we have quite a lot of missing gene annotations
 missing_annotations <- setdiff(unique(counts$ENSEMBL), unique(gene_annotation$ENSEMBL))
 sprintf("The number of missing annotations %s out of %s", length(missing_annotations), length(unique(counts$ENSEMBL)))
 
-# loot for missing sample metadata
+# decided to remove genes with missing annotations at the moement
+counts <- counts[-(which(missing_annotations %in% counts$ENSEMBL)),]
+dim(counts)
+
+# look for missing sample metadata
 length(unique(sample_annotation$sample_id))
 length(unique(colnames(counts)[-1]))
 setdiff(sample_annotation$sample_id, colnames(counts)[-1])
-# we have complete pe-rsample metadata
+# we have complete per-sample metadata
 
+# convert columns to numeric
+toConvert <- colnames(counts)[-1]
+counts[,toConvert] = apply(counts[,toConvert], 2, function(x) as.numeric(as.character(x)));
 
-
-count_qnt <- t(apply(counts[,-1], 1, quantile, probe = c(.25,.75), na.rm = FALSE))
-
-# CPM gene
-ens_id <- gene_annotation[which(gene_annotation$SYMBOL %in% "CPM"),]$ENSEMBL
-cpm_values <- counts[which(counts$ENSEMBL %in% ens_id),]
-count_qnt[which(counts$ENSEMBL %in% ens_id),]
+# Form a DGEList - not working at the moment
+y <- DGEList(counts[,-1], 
+             genes = gene_annotation,
+             remove.zeros = TRUE,
+             samples = sample_annotation,
+             group = sample_annotation$type)
 
 ```
+
+```{r Filter the count data for lowly-expressed genes}
+# normalize counts to cpm, require value >= 1 for a valid measure
+valid_cpm <- as.data.frame(cpm(y) >= 1)
+
+# Kinda ugly - need to optimize this approach...
+# ...but the idea is to mark each gene as valid or not, per group
+# we denote 'valid'as 75% or more cases of valid cpm, per gene (per group)
+normal_col_idx <- which(y$samples$group %in% "lesional")
+lesional_col_idx <- which(y$samples$group %in% "normal")
+toKeep_normal <- rowSums(valid_cpm[,normal_col_idx]) > 0.75*length(normal_col_idx)
+toKeep_lesional <- rowSums(valid_cpm[,lesional_col_idx]) > 0.75*length(lesional_col_idx)
+toKeep <- as.numeric(union(names(toKeep_normal[toKeep_normal]),names(toKeep_lesional[toKeep_lesional])))
+sprintf("Remaining with %s genes out of %s",length(toKeep), length(counts$ENSEMBL))
+counts <- counts[toKeep,]
+
+#count_qnt <- t(apply(counts[,-1], 1, quantile, probe = c(.25,.75), na.rm = FALSE))
+```
+
