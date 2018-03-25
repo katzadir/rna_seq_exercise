@@ -5,9 +5,9 @@ output: html_notebook
 
 
 
-```{r Setup phase, message=TRUE}
+```{r Setup phase, message=FALSE, warning=FALSE}
 
-# Install Bioconductor
+# Install Bioconductor - uncomment on first run
 source("https://bioconductor.org/biocLite.R")
 biocLite()
 
@@ -15,6 +15,17 @@ biocLite()
 biocLite("edgeR")
 library(limma)
 library(edgeR)
+# installing packages - uncomment on first run
+# install.packages("ggplot2")
+library(ggplot2)
+
+#install.packages("devtools")
+library(devtools)
+
+#install.packages("ggfortify")
+library(ggfortify)
+
+
 ```
 
 ```{r Raw data import}
@@ -26,7 +37,7 @@ counts <- read.delim("data/counts.txt", stringsAsFactors = TRUE)
 
 ```
 
-```{r Initial cleaning - form DGEList}
+```{r Initial cleaning - form DGEList, message=FALSE, warning=FALSE}
 
 # explore the properties of the gene-annotation 
 dim(gene_annotation)
@@ -91,8 +102,38 @@ y$counts <- y$counts[toKeep,]
 #count_qnt <- t(apply(counts[,-1], 1, quantile, probe = c(.25,.75), na.rm = FALSE))
 ```
 
-```{r Generate an object that contains the library-size normalized log-CPM}
-aveLogCPM_normByLibSize <- aveLogCPM(y, normalized.lib.sizes = TRUE)
-save(aveLogCPM_normByLibSize, file = "aveLogCPM_normByLibSize.rda")
+```{r Generate an object that contains the library-size normalized log-CPM, message=FALSE, warning=FALSE}
+logCPM_normByLibSize <- cpm(y, log = TRUE, normalized.lib.sizes = TRUE)
+save(aveLogCPM_normByLibSize, file = "logCPM_normByLibSize.rda")
+```
+
+```{r Basic data plotting}
+#plotMD(y)
+
+# plot the library size, per sample
+ggplot(data=y$samples, aes(x=1:length(y$samples$sample_id),y=lib.size)) + geom_bar(stat="identity") + ggtitle("Library size per sample (millions)")
+
+# multi-dimentional scaling plot
+y2 <- calcNormFactors(y)
+col <- as.numeric(y2$samples$type)
+mds <- plotMDS(y2, top=200, col=col)
+plotMDS(mds, col=col, labels=y2$samples$sample_id)
+
+
+# density
+###norm_logCPM <- colSums(logCPM_normByLibSize)/sum(logCPM_normByLibSize)
+###plot(density(norm_logCPM))
+###plot(density(as.vector(norm_logCPM*1000000)))
+
+# pca plor per group - another way....
+##pca.normal <- prcomp(t( logCPM_normByLibSize[, normal_col_idx]), scale = T)
+##pca.lesional <- prcomp(t( logCPM_normByLibSize[, lesional_col_idx]), scale = T)
+##screeplot(pca.normal, type="lines")
+
+
+```
+
+```{r Identify outliers from the PA analysis}
+
 ```
 
