@@ -25,6 +25,8 @@ library(devtools)
 #install.packages("ggfortify")
 library(ggfortify)
 
+# Only if I need to use OutlierMahdist
+#library(rrcovHD)
 
 ```
 
@@ -76,64 +78,122 @@ setdiff(sample_annotation$sample_id, colnames(counts)[-1])
 toConvert <- colnames(counts)[-1]
 counts[,toConvert] = apply(counts[,toConvert], 2, function(x) as.numeric(as.character(x)));
 
-# Form a DGEList - not working at the moment
+# Form a DGEList - a basic data structure for working with RNA seq
 y <- DGEList(counts[,-1], 
              genes = gene_annotation,
              remove.zeros = TRUE,
              samples = sample_annotation,
              group = sample_annotation$type)
+# Note that using calcNormFactors does not change the counts: it just updates the column norm.factors in $samples
+y <- calcNormFactors(y) 
 
 ```
 
 ```{r Filter the count data for lowly-expressed genes}
 # normalize counts to cpm, require value >= 1 for a valid measure
-valid_cpm <- as.data.frame(cpm(y) >= 1)
+y$cpm <- cpm(y)
+valid_cpm <- as.data.frame( y$cpm >= 1)
 
 # Kinda ugly - need to optimize this approach...
 # ...but the idea is to mark each gene as valid or not, per group
 # we denote 'valid'as 75% or more cases of valid cpm, per gene (per group)
 normal_col_idx <- which(y$samples$group %in% "lesional")
-lesional_col_idx <- which(y$samples$group %in% "normal")
 toKeep_normal <- rowSums(valid_cpm[,normal_col_idx]) > 0.75*length(normal_col_idx)
+
+lesional_col_idx <- which(y$samples$group %in% "normal")
 toKeep_lesional <- rowSums(valid_cpm[,lesional_col_idx]) > 0.75*length(lesional_col_idx)
+
 toKeep <- (union(names(toKeep_normal[toKeep_normal]),names(toKeep_lesional[toKeep_lesional])))
 sprintf("Remaining with %s genes out of %s",length(toKeep), length(counts$ENSEMBL))
+y.pre_filtered <- y
 y$counts <- y$counts[toKeep,]
-#count_qnt <- t(apply(counts[,-1], 1, quantile, probe = c(.25,.75), na.rm = FALSE))
 ```
 
 ```{r Generate an object that contains the library-size normalized log-CPM, message=FALSE, warning=FALSE}
-logCPM_normByLibSize <- cpm(y, log = TRUE, normalized.lib.sizes = TRUE)
-save(aveLogCPM_normByLibSize, file = "logCPM_normByLibSize.rda")
+y$logcom <- cpm(y, log = TRUE, normalized.lib.sizes = TRUE)
+saveRDS(y$logcom, file = "logCPM.normalizaed.rda")
 ```
 
 ```{r Basic data plotting}
-#plotMD(y)
+
+# general properties of the dataset - may be able to avoid these vars
+group <- as.numeric(y$samples$type)
+nsamples <- ncol(y)
 
 # plot the library size, per sample
-ggplot(data=y$samples, aes(x=1:length(y$samples$sample_id),y=lib.size)) + geom_bar(stat="identity") + ggtitle("Library size per sample (millions)")
-
-# multi-dimentional scaling plot
-y2 <- calcNormFactors(y)
-col <- as.numeric(y2$samples$type)
-mds <- plotMDS(y2, top=200, col=col)
-plotMDS(mds, col=col, labels=y2$samples$sample_id)
+ggplot(data=y$samples, aes(x=1:length(y$samples$sample_id),y=lib.size)) + 
+  geom_bar(stat="identity" ,color=y$samples$type) + 
+  ggtitle("Library size per sample (millions)")
 
 
 # density
-###norm_logCPM <- colSums(logCPM_normByLibSize)/sum(logCPM_normByLibSize)
-###plot(density(norm_logCPM))
-###plot(density(as.vector(norm_logCPM*1000000)))
+# the density is - on the x axis - the log-cpm
+# the y-axis the frequenvy
+# we can se several curevs - one per sample, and how they are distributed across genes.
 
-# pca plor per group - another way....
-##pca.normal <- prcomp(t( logCPM_normByLibSize[, normal_col_idx]), scale = T)
-##pca.lesional <- prcomp(t( logCPM_normByLibSize[, lesional_col_idx]), scale = T)
-##screeplot(pca.normal, type="lines")
 
+{
+  y.pre_filtered$logcpm <- cpm(y.pre_filtered, normalized.lib.sizes = TRUE, log = TRUE)
+  plot(density(y.pre_filtered$logcpm[,1]), col=y.pre_filtered$samples$type[1], lwd=1,ylim=c(0,0.6), las=2,main="",xlab="")
+  title(main="A. before data cleaning", xlab="Log-cpm")
+  abline(v=0, lty=2)
+  for (i in 2:ncol(y.pre_filtered)){
+   den <- density(y.pre_filtered$logcpm[,i])
+   lines(den$x, den$y, col=y.pre_filtered$samples$type[i], lwd=1)
+  }
+}
+{
+  plot(density(y$logcom[,1]), col=y$samples$type[1], lwd=1,ylim=c(0,0.21), las=2,main="",xlab="")
+  title(main="B. after data filtering", xlab="Log-cpm")
+  abline(v=0, lty=2)
+  for (i in 2:ncol(y)){
+   den <- density(y$logcom[,i])
+   lines(den$x, den$y, col=y$samples$type[i], lwd=1)
+  }
+}
+
+# PCA - multi-dimentional scaling plot
+mds <- plotMDS(y, top=200, col=as.numeric(y$samples$type))
+
+# PCA plot, with group coloring
+local({
+  pc <- prcomp(t(cpm(y)))
+  autoplot(pc, data = y$samples, colour = 'type', label.repel = TRUE, label.size = 2)
+  
+})
+print("We notice that sample SRR1146216 is probably mislabeled, so we omit that sample.")
+
+y$counts <- y$counts[,-c(which(y$samples$sample_id %in% "SRR1146216"))]
+print(dim(y$counts))
+```
+
+```{r}
+#TODO:
+
+# Norm factor
 
 ```
 
-```{r Identify outliers from the PA analysis}
+```{r Identify outliers from the PCA analysis}
+# extract outliers from matrix after PCA
+dim(pca.normal$x)
+dim(pca.lesional$x)
+length(pca.normal$sdev)
+
+col.sd <- pca.normal$sdev
+col.mean <- colMeans(pca.normal$x)
+
+
+
+# mahalanobis distance based outlier detection?
+outliers.normal <- OutlierMahdist(logCpm.normal)
+outliers.lesional <- OutlierMahdist(t(logCpm.lesional))
+
+#pca.normal$x - col.mean / col.sd)
+#pca.normal.scaled <- scale(pca.normal$x, center = col.mean, scale = col.sd)
+```
+
+```{r Differential expression analysis comparing lesional vs normal}
 
 ```
 
