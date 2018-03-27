@@ -9,25 +9,17 @@ output: html_notebook
 
 # Install Bioconductor - uncomment on first run
 source("https://bioconductor.org/biocLite.R")
-biocLite()
+biocLite(pkgs = c("edgeR","limma"))
 
-# Install edgeR
-biocLite("edgeR")
-library(limma)
-library(edgeR)
-# installing packages - uncomment on first run
-# install.packages("ggplot2")
+# Make sure we have all the required packages to run this notebook
+list.of.packages <- c("edgeR", "ggplot2","devtools","ggfortify","pheatmap")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+
 library(ggplot2)
-
-#install.packages("devtools")
 library(devtools)
-
-#install.packages("ggfortify")
 library(ggfortify)
-
-# Only if I need to use OutlierMahdist
-#library(rrcovHD)
-
+library(pheatmap)
 ```
 
 ```{r Raw data import}
@@ -181,10 +173,15 @@ design <- model.matrix(data = y$samples, ~type)
 y <- estimateDisp(y, design)
 fit <- glmQLFit(y,design)
 qlf <- glmQLFTest(fit,coef=2)
-top.tags <- topTags(qlf, n=200)
+top.tags <- topTags(qlf, n=100)
 ```
 
 ```{r Export the GE analysis results}
 write.table(top.tags, "de.analysis", sep = "\t", row.names = F)
 ```
+
+```{r Heatmap of top 100 genes}
+
+```
+
 
