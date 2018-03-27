@@ -151,6 +151,9 @@ ggplot(data=y$samples, aes(x=1:length(y$samples$sample_id),y=lib.size)) +
    lines(den$x, den$y, col=y$samples$type[i], lwd=1)
   }
 }
+```
+
+```{r Identify outliers from the PCA analysis}
 
 # PCA - multi-dimentional scaling plot
 mds <- plotMDS(y, top=200, col=as.numeric(y$samples$type))
@@ -161,39 +164,27 @@ local({
   autoplot(pc, data = y$samples, colour = 'type', label.repel = TRUE, label.size = 2)
   
 })
-print("We notice that sample SRR1146216 is probably mislabeled, so we omit that sample.")
 
-y$counts <- y$counts[,-c(which(y$samples$sample_id %in% "SRR1146216"))]
-print(dim(y$counts))
-```
-
-```{r}
-#TODO:
-
-# Norm factor
-
-```
-
-```{r Identify outliers from the PCA analysis}
 # extract outliers from matrix after PCA
-dim(pca.normal$x)
-dim(pca.lesional$x)
-length(pca.normal$sdev)
-
-col.sd <- pca.normal$sdev
-col.mean <- colMeans(pca.normal$x)
-
-
-
-# mahalanobis distance based outlier detection?
-outliers.normal <- OutlierMahdist(logCpm.normal)
-outliers.lesional <- OutlierMahdist(t(logCpm.lesional))
-
-#pca.normal$x - col.mean / col.sd)
-#pca.normal.scaled <- scale(pca.normal$x, center = col.mean, scale = col.sd)
+print("We notice that sample SRR1146216 is probably mislabeled, so we omit that sample.")
+y$counts <- y$counts[,-c(which(y$samples$sample_id %in% "SRR1146216"))]
+y$samples <- y$samples[-c(which(y$samples$sample_id %in% "SRR1146216")),]
+print(dim(y$samples))
 ```
 
 ```{r Differential expression analysis comparing lesional vs normal}
+# Relevel the 'type' field, so 'normal' will have the factor value of 1
+# Hence, the model.matrix when turning 'type' to dummay vairable, will treat 'normal' as 0
+# and 'lesional' as 1
+y$samples$type <- relevel(y$samples$type, 'normal')
+design <- model.matrix(data = y$samples, ~type)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y,design)
+qlf <- glmQLFTest(fit,coef=2)
+top.tags <- topTags(qlf, n=200)
+```
 
+```{r Export the GE analysis results}
+write.table(top.tags, "de.analysis", sep = "\t", row.names = F)
 ```
 
