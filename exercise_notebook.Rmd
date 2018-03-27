@@ -5,21 +5,22 @@ output: html_notebook
 
 
 
-```{r Setup phase, message=FALSE, warning=FALSE}
+```{r Setup phase, message=FALSE, warning=FALSE, include=FALSE}
 
 # Install Bioconductor - uncomment on first run
 source("https://bioconductor.org/biocLite.R")
-biocLite(pkgs = c("edgeR","limma"))
+biocLite(pkgs = c("edgeR","limma"), ask = F)
 
 # Make sure we have all the required packages to run this notebook
 list.of.packages <- c("edgeR", "ggplot2","devtools","ggfortify","pheatmap")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
+library(edgeR)
 library(ggplot2)
 library(devtools)
 library(ggfortify)
-library(pheatmap)
+#library(pheatmap)
 ```
 
 ```{r Raw data import}
@@ -49,16 +50,27 @@ table(sample_annotation$type)
 dim(counts)
 colnames(counts)[1] <- "ENSEMBL"
 
+# sanity to make sure each gene/sample occure once
+length(unique(counts$ENSEMBL)) == length((counts$ENSEMBL))
+length(unique(gene_annotation$ENSEMBL)) == length((gene_annotation$ENSEMBL))
+length(unique(sample_annotation$sample_id)) == length((sample_annotation$sample_id))
+
+# allign the data - a important step to make surecounts, gene_annotation and sample annotation use the same index
+gene_annotation <- gene_annotation[order(gene_annotation$ENSEMBL), ]
+sample_annotation <- sample_annotation[order(sample_annotation$sample_id), ]
+counts <- counts[order(counts$ENSEMBL), ]
+counts <- counts[, order(colnames(counts))]
+
 # now sure the annotation and counts are consistent
 # it seems we have quite a lot of missing gene annotations
-length(unique(counts$ENSEMBL))
-length(unique(gene_annotation$ENSEMBL))
-missing_annotations <- setdiff(unique(counts$ENSEMBL), unique(gene_annotation$ENSEMBL))
-sprintf("The number of missing annotations %s out of %s", length(missing_annotations), length(unique(counts$ENSEMBL)))
+#missing_annotations <- setdiff(counts$ENSEMBL, gene_annotation$ENSEMBL)
+annotation_occurence <- counts$ENSEMBL %in% gene_annotation$ENSEMBL
+sprintf("We have %s annotated genes out of %s", 
+        length(annotation_occurence[annotation_occurence]), length(annotation_occurence))
 
 # decided to remove genes with missing annotations at the moement
-counts <- counts[-(which(missing_annotations %in% counts$ENSEMBL)),]
-dim(counts)
+counts <- counts[annotation_occurence,]
+gene_annotation <- gene_annotation[gene_annotation$ENSEMBL %in% counts$ENSEMBL, ]
 
 # look for missing sample metadata
 length(unique(sample_annotation$sample_id))
@@ -67,15 +79,16 @@ setdiff(sample_annotation$sample_id, colnames(counts)[-1])
 # we have complete per-sample metadata
 
 # convert columns to numeric
-toConvert <- colnames(counts)[-1]
-counts[,toConvert] = apply(counts[,toConvert], 2, function(x) as.numeric(as.character(x)));
+##toConvert <- colnames(counts)[-1]
+##counts[,toConvert] = apply(counts[,toConvert], 2, function(x) as.numeric(as.character(x)));
 
 # Form a DGEList - a basic data structure for working with RNA seq
 y <- DGEList(counts[,-1], 
              genes = gene_annotation,
-             remove.zeros = TRUE,
+             remove.zeros = T,
              samples = sample_annotation,
              group = sample_annotation$type)
+
 # Note that using calcNormFactors does not change the counts: it just updates the column norm.factors in $samples
 y <- calcNormFactors(y) 
 
@@ -83,8 +96,8 @@ y <- calcNormFactors(y)
 
 ```{r Filter the count data for lowly-expressed genes}
 # normalize counts to cpm, require value >= 1 for a valid measure
-y$cpm <- cpm(y)
-valid_cpm <- as.data.frame( y$cpm >= 1)
+y.cpm <- cpm(y)
+valid_cpm <- y.cpm >= 1
 
 # Kinda ugly - need to optimize this approach...
 # ...but the idea is to mark each gene as valid or not, per group
@@ -95,26 +108,31 @@ toKeep_normal <- rowSums(valid_cpm[,normal_col_idx]) > 0.75*length(normal_col_id
 lesional_col_idx <- which(y$samples$group %in% "normal")
 toKeep_lesional <- rowSums(valid_cpm[,lesional_col_idx]) > 0.75*length(lesional_col_idx)
 
-toKeep <- (union(names(toKeep_normal[toKeep_normal]),names(toKeep_lesional[toKeep_lesional])))
-sprintf("Remaining with %s genes out of %s",length(toKeep), length(counts$ENSEMBL))
+toKeep <- toKeep_normal | toKeep_lesional
+sprintf("Remaining with %s genes out of %s",length(toKeep[toKeep]), length(counts$ENSEMBL))
 y.pre_filtered <- y
-y$counts <- y$counts[toKeep,]
+
+y.filtered <- DGEList(counts = y$counts[toKeep,], 
+             genes = y$genes[toKeep,],
+             remove.zeros = T,
+             samples = sample_annotation,
+             group = sample_annotation$type)
 ```
 
 ```{r Generate an object that contains the library-size normalized log-CPM, message=FALSE, warning=FALSE}
-y$logcom <- cpm(y, log = TRUE, normalized.lib.sizes = TRUE)
-saveRDS(y$logcom, file = "logCPM.normalizaed.rda")
+y.filtered.logcom <- cpm(y.filtered, log = TRUE, normalized.lib.sizes = TRUE)
+saveRDS(y.filtered.logcom, file = "logCPM.normalizaed.rda")
 ```
 
 ```{r Basic data plotting}
 
 # general properties of the dataset - may be able to avoid these vars
-group <- as.numeric(y$samples$type)
-nsamples <- ncol(y)
+##group <- as.numeric(y$samples$type)
+##nsamples <- ncol(y)
 
 # plot the library size, per sample
-ggplot(data=y$samples, aes(x=1:length(y$samples$sample_id),y=lib.size)) + 
-  geom_bar(stat="identity" ,color=y$samples$type) + 
+ggplot(data=y.filtered$samples, aes(x=1:length(y.filtered$samples$sample_id),y=lib.size)) + 
+  geom_bar(stat="identity" ,color=y.filtered$samples$type) + 
   ggtitle("Library size per sample (millions)")
 
 
@@ -125,22 +143,22 @@ ggplot(data=y$samples, aes(x=1:length(y$samples$sample_id),y=lib.size)) +
 
 
 {
-  y.pre_filtered$logcpm <- cpm(y.pre_filtered, normalized.lib.sizes = TRUE, log = TRUE)
-  plot(density(y.pre_filtered$logcpm[,1]), col=y.pre_filtered$samples$type[1], lwd=1,ylim=c(0,0.6), las=2,main="",xlab="")
+  y.pre_filtered.logcpm <- cpm(y.pre_filtered, normalized.lib.sizes = TRUE, log = TRUE)
+  plot(density(y.pre_filtered.logcpm[,1]), col=y.pre_filtered$samples$type[1], lwd=1,ylim=c(0,0.6), las=2,main="",xlab="")
   title(main="A. before data cleaning", xlab="Log-cpm")
   abline(v=0, lty=2)
   for (i in 2:ncol(y.pre_filtered)){
-   den <- density(y.pre_filtered$logcpm[,i])
+   den <- density(y.pre_filtered.logcpm[,i])
    lines(den$x, den$y, col=y.pre_filtered$samples$type[i], lwd=1)
   }
 }
 {
-  plot(density(y$logcom[,1]), col=y$samples$type[1], lwd=1,ylim=c(0,0.21), las=2,main="",xlab="")
+  plot(density(y.filtered.logcom[,1]), col=y.filtered$samples$type[1], lwd=1,ylim=c(0,0.21), las=2,main="",xlab="")
   title(main="B. after data filtering", xlab="Log-cpm")
   abline(v=0, lty=2)
   for (i in 2:ncol(y)){
-   den <- density(y$logcom[,i])
-   lines(den$x, den$y, col=y$samples$type[i], lwd=1)
+   den <- density(y.filtered.logcom[,i])
+   lines(den$x, den$y, col=y.filtered$samples$type[i], lwd=1)
   }
 }
 ```
@@ -152,9 +170,8 @@ mds <- plotMDS(y, top=200, col=as.numeric(y$samples$type))
 
 # PCA plot, with group coloring
 local({
-  pc <- prcomp(t(cpm(y)))
-  autoplot(pc, data = y$samples, colour = 'type', label.repel = TRUE, label.size = 2)
-  
+  pc <- prcomp(t(cpm(y.filtered)))
+  autoplot(pc, data = y.filtered$samples, colour = 'type', label.repel = TRUE, label.size = 1)
 })
 
 # extract outliers from matrix after PCA
@@ -168,10 +185,10 @@ print(dim(y$samples))
 # Relevel the 'type' field, so 'normal' will have the factor value of 1
 # Hence, the model.matrix when turning 'type' to dummay vairable, will treat 'normal' as 0
 # and 'lesional' as 1
-y$samples$type <- relevel(y$samples$type, 'normal')
-design <- model.matrix(data = y$samples, ~type)
-y <- estimateDisp(y, design)
-fit <- glmQLFit(y,design)
+y.filtered$samples$type <- relevel(y.filtered$samples$type, 'normal')
+design <- model.matrix(data = y.filtered$samples, ~type)
+y.filtered <- estimateDisp(y.filtered, design)
+fit <- glmQLFit(y.filtered,design)
 qlf <- glmQLFTest(fit,coef=2)
 top.tags <- topTags(qlf, n=100)
 ```
@@ -181,6 +198,8 @@ write.table(top.tags, "de.analysis", sep = "\t", row.names = F)
 ```
 
 ```{r Heatmap of top 100 genes}
+top_sig_genes <- (y.filtered$genes$ENSEMBL %in% top.tags$table$ENSEMBL)
+pheatmap(mat = y.filtered.logcom[top_sig_genes,], legend = T, show_colnames = T)
 
 ```
 
