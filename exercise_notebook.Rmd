@@ -209,8 +209,10 @@ anno_colors <- list(SampleType = col_colors)
 # draw a heatmap, having only the top genes, across all samples.
 # order and color samples by type
 pheatmap(mat = y.filtered.logcom[top_sig_genes,order(y.filtered$samples$type)], 
-         legend = T, show_colnames = T, annotation = annotation, cluster_cols = F,
-         annotation_colors = anno_colors)
+         legend = T, show_colnames = T, annotation = annotation, cluster_cols = T,
+         cluster_rows = T, annotation_colors = anno_colors)
+
+# it seems as if we have another mislabeled sample.
 
 ```
 
