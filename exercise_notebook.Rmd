@@ -12,7 +12,7 @@ source("https://bioconductor.org/biocLite.R")
 biocLite(pkgs = c("edgeR","limma"), ask = F)
 
 # Make sure we have all the required packages to run this notebook
-list.of.packages <- c("edgeR", "ggplot2","devtools","ggfortify","pheatmap")
+list.of.packages <- c("edgeR", "ggplot2","devtools","ggfortify","pheatmap","grid")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 
@@ -21,6 +21,7 @@ library(ggplot2)
 library(devtools)
 library(ggfortify)
 library(pheatmap)
+library(grid)
 ```
 
 ```{r Raw data import}
@@ -36,23 +37,26 @@ counts <- read.delim("data/counts.txt", stringsAsFactors = TRUE)
 
 # explore the properties of the gene-annotation 
 dim(gene_annotation)
-summary(gene_annotation)
 head(gene_annotation)
 
 # the same for sample annotation
 dim(sample_annotation)
 head(sample_annotation)
 
-# seems like categorical variable
+# presents the number of samples per group
 table(sample_annotation$type)
 
 # look at the count data-set, extract quantiles
 dim(counts)
 colnames(counts)[1] <- "ENSEMBL"
 
-# sanity to make sure each gene/sample occure once
+# make sure there is no redundancy in the gene level on the count matrix
 length(unique(counts$ENSEMBL)) == length((counts$ENSEMBL))
+
+# make sure there is no redundancy in the gene level on the gene annotation
 length(unique(gene_annotation$ENSEMBL)) == length((gene_annotation$ENSEMBL))
+
+# make sure there is no duplicat esamples
 length(unique(sample_annotation$sample_id)) == length((sample_annotation$sample_id))
 
 # allign the data - a important step to make surecounts, gene_annotation and sample annotation use the same index
@@ -72,8 +76,6 @@ counts <- counts[annotation_occurence,]
 gene_annotation <- gene_annotation[gene_annotation$ENSEMBL %in% counts$ENSEMBL, ]
 
 # look for missing sample metadata
-length(unique(sample_annotation$sample_id))
-length(unique(colnames(counts)[-1]))
 setdiff(sample_annotation$sample_id, colnames(counts)[-1])
 # it seems we have we have complete per-sample metadata
 
@@ -107,6 +109,7 @@ toKeep <- toKeep_normal | toKeep_lesional
 sprintf("Remaining with %s genes out of %s",length(toKeep[toKeep]), length(counts$ENSEMBL))
 y.pre_filtered <- y
 
+# create a new DGEList holding only the filtered data
 y.filtered <- DGEList(counts = y$counts[toKeep,], 
              genes = y$genes[toKeep,],
              remove.zeros = T,
@@ -115,6 +118,7 @@ y.filtered <- DGEList(counts = y$counts[toKeep,],
 ```
 
 ```{r Generate an object that contains the library-size normalized log-CPM, message=FALSE, warning=FALSE}
+# compute the log cpm value, normalized by library size and save the results
 y.filtered.logcom <- cpm(y.filtered, log = TRUE, normalized.lib.sizes = TRUE)
 saveRDS(y.filtered.logcom, file = "logCPM.normalizaed.rda")
 ```
@@ -161,11 +165,13 @@ local({
   autoplot(pc, data = y.filtered$samples, colour = 'type', label.repel = TRUE, label.size = 1)
 })
 
-# extract outliers from matrix after PCA
+
 print("We notice that sample SRR1146216 is probably mislabeled, so we omit that sample.")
+
+# extract outliers from matrix after PCA
 y$counts <- y$counts[,-c(which(y$samples$sample_id %in% "SRR1146216"))]
 y$samples <- y$samples[-c(which(y$samples$sample_id %in% "SRR1146216")),]
-print(dim(y$samples))
+
 ```
 
 ```{r Differential expression analysis comparing lesional vs normal}
@@ -175,12 +181,14 @@ print(dim(y$samples))
 y.filtered$samples$type <- relevel(y.filtered$samples$type, 'normal')
 design <- model.matrix(data = y.filtered$samples, ~type)
 y.filtered <- estimateDisp(y.filtered, design)
+# use glm for differential gene expression 
 fit <- glmQLFit(y.filtered,design)
 qlf <- glmQLFTest(fit,coef=2)
 top.tags <- topTags(qlf, n=100)
 ```
 
 ```{r Export the GE analysis results}
+# export the top genes
 write.table(top.tags, "de.analysis", sep = "\t", row.names = F)
 ```
 
