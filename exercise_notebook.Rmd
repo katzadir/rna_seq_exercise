@@ -76,11 +76,7 @@ gene_annotation <- gene_annotation[gene_annotation$ENSEMBL %in% counts$ENSEMBL, 
 length(unique(sample_annotation$sample_id))
 length(unique(colnames(counts)[-1]))
 setdiff(sample_annotation$sample_id, colnames(counts)[-1])
-# we have complete per-sample metadata
-
-# convert columns to numeric
-##toConvert <- colnames(counts)[-1]
-##counts[,toConvert] = apply(counts[,toConvert], 2, function(x) as.numeric(as.character(x)));
+# it seems we have we have complete per-sample metadata
 
 # Form a DGEList - a basic data structure for working with RNA seq
 y <- DGEList(counts[,-1], 
@@ -216,6 +212,13 @@ pheatmap(mat = y.filtered.logcom[top_sig_genes,order(y.filtered$samples$type)],
          legend = T, show_colnames = T, annotation = annotation, cluster_cols = F,
          annotation_colors = anno_colors)
 
+```
+
+```{r Generate a volcano plot}
+# constructing volcano plot: the genes with the highest effect size (fold change between the normal and lesional) 
+# and statistical significancy appear at the far edges.
+ggplot(data=qlf$table, aes(x=logFC, y=-log10(PValue) , colour=top_sig_genes)) + 
+  geom_point(alpha=0.4, size=1.75) + xlab("log2 fold change") + ylab("-log10 p-value")
 ```
 
 
