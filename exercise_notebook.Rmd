@@ -20,7 +20,7 @@ library(edgeR)
 library(ggplot2)
 library(devtools)
 library(ggfortify)
-#library(pheatmap)
+library(pheatmap)
 ```
 
 ```{r Raw data import}
@@ -198,8 +198,23 @@ write.table(top.tags, "de.analysis", sep = "\t", row.names = F)
 ```
 
 ```{r Heatmap of top 100 genes}
+# mark the top genes  idendtified by the GE analysis
 top_sig_genes <- (y.filtered$genes$ENSEMBL %in% top.tags$table$ENSEMBL)
-pheatmap(mat = y.filtered.logcom[top_sig_genes,], legend = T, show_colnames = T)
+
+# annotate samples per color per group 
+annotation <- data.frame(SampleType = factor(y.filtered[top_sig_genes,]$samples$type))
+rownames(annotation) <- colnames(y.filtered) 
+
+# define the color - just for practice
+col_colors <- c("green", "black")
+names(col_colors) <- c("normal", "lesional")
+anno_colors <- list(SampleType = col_colors)
+
+# draw a heatmap, having only the top genes, across all samples.
+# order and color samples by type
+pheatmap(mat = y.filtered.logcom[top_sig_genes,order(y.filtered$samples$type)], 
+         legend = T, show_colnames = T, annotation = annotation, cluster_cols = F,
+         annotation_colors = anno_colors)
 
 ```
 
