@@ -63,7 +63,6 @@ counts <- counts[, order(colnames(counts))]
 
 # now sure the annotation and counts are consistent
 # it seems we have quite a lot of missing gene annotations
-#missing_annotations <- setdiff(counts$ENSEMBL, gene_annotation$ENSEMBL)
 annotation_occurence <- counts$ENSEMBL %in% gene_annotation$ENSEMBL
 sprintf("We have %s annotated genes out of %s", 
         length(annotation_occurence[annotation_occurence]), length(annotation_occurence))
@@ -121,11 +120,6 @@ saveRDS(y.filtered.logcom, file = "logCPM.normalizaed.rda")
 ```
 
 ```{r Basic data plotting}
-
-# general properties of the dataset - may be able to avoid these vars
-##group <- as.numeric(y$samples$type)
-##nsamples <- ncol(y)
-
 # plot the library size, per sample
 ggplot(data=y.filtered$samples, aes(x=1:length(y.filtered$samples$sample_id),y=lib.size)) + 
   geom_bar(stat="identity" ,color=y.filtered$samples$type) + 
@@ -135,9 +129,6 @@ ggplot(data=y.filtered$samples, aes(x=1:length(y.filtered$samples$sample_id),y=l
 # density
 # the density is - on the x axis - the log-cpm
 # the y-axis the frequenvy
-# we can se several curevs - one per sample, and how they are distributed across genes.
-
-
 {
   y.pre_filtered.logcpm <- cpm(y.pre_filtered, normalized.lib.sizes = TRUE, log = TRUE)
   plot(density(y.pre_filtered.logcpm[,1]), col=y.pre_filtered$samples$type[1], lwd=1,ylim=c(0,0.6), las=2,main="",xlab="")
@@ -193,28 +184,33 @@ top.tags <- topTags(qlf, n=100)
 write.table(top.tags, "de.analysis", sep = "\t", row.names = F)
 ```
 
-```{r Heatmap of top 100 genes}
+```{r Create a Heatmap of top 100 genes}
 # mark the top genes  idendtified by the GE analysis
 top_sig_genes <- (y.filtered$genes$ENSEMBL %in% top.tags$table$ENSEMBL)
 
 # annotate samples per color per group 
-annotation <- data.frame(SampleType = factor(y.filtered[top_sig_genes,]$samples$type))
+annotation <- data.frame(type = factor(y.filtered[top_sig_genes,]$samples$type))
 rownames(annotation) <- colnames(y.filtered) 
 
 # define the color - just for practice
 col_colors <- c("green", "black")
 names(col_colors) <- c("normal", "lesional")
-anno_colors <- list(SampleType = col_colors)
+anno_colors <- list(type = col_colors)
 
 # draw a heatmap, having only the top genes, across all samples.
 # order and color samples by type
-pheatmap(mat = y.filtered.logcom[top_sig_genes,order(y.filtered$samples$type)], 
-         legend = T, show_colnames = T, annotation = annotation, cluster_cols = T,
-         cluster_rows = T, annotation_colors = anno_colors)
-
-# it seems as if we have another mislabeled sample.
-
+p <- pheatmap(mat = y.filtered.logcom[top_sig_genes,order(y.filtered$samples$type)], 
+         show_colnames = T, show_rownames = T, annotation_col = annotation, cluster_cols = T,
+         cluster_rows = T, annotation_colors = anno_colors, silent = T)
 ```
+
+
+```{r Plot the heatmap}
+# looking at the graph, it seems as if we have another mislabeled sample.
+grid.newpage()
+grid.draw(p$gtable)
+```
+
 
 ```{r Generate a volcano plot}
 # constructing volcano plot: the genes with the highest effect size (fold change between the normal and lesional) 
